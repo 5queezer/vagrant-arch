@@ -14,7 +14,7 @@ function uncomment() {
   sed -i "s/\(#\s*\)\(.*$1.*\)/\2/" $2
 }
 
-function append_after() {
+function insert_after() {
   sed -i "/^.*$1.*/a $2" $3
 }
 
@@ -32,7 +32,9 @@ if ! grep -q "modules/libphp7.so" $FILE; then
   comment 'unique_id_module' $FILE
   comment 'mpm_event_module' $FILE
   uncomment 'mpm_prefork_module' $FILE
-  append_after 'mpm_prefork_module' 'LoadModule php7_module modules/libphp7.so\nAddHandler php7-script .php' $FILE
+  insert_after 'mpm_prefork_module' \
+              'LoadModule php7_module modules/libphp7.so\nAddHandler php7-script .php' \
+              $FILE
 
   echo -e "\n# Load PHP Module 7" >> $FILE
   echo -e "<IfModule php7_module>" >> $FILE
@@ -48,7 +50,7 @@ mkdir -p /etc/httpd/conf/vhost.d
 
 grep -q "dummy-host.example.com" /etc/httpd/conf/extra/httpd-vhosts.conf \
   && cat <<-EOS > /etc/httpd/conf/extra/httpd-vhosts.conf
-  Include conf/vhost.d/*.conf
+Include conf/vhost.d/*.conf
 EOS
 
 # Example file
