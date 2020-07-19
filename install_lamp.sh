@@ -7,11 +7,13 @@ function install() {
 }
 
 function comment() {
-  sed "/$1/s/^/#/" $2
+  grep -qE "^[^#\s].*$1" $2 \
+  && sed -i "/$1/s/^/#/" $2
 }
 
 function uncomment() {
-  sed -i "s/\(#\s*\)\(.*$1.*\)/\2/" $2
+  grep -qE "^[#\s].*$1" $2 \
+  && sed -i "s/\(#\s*\)\(.*$1.*\)/\2/" $2
 }
 
 function insert_after() {
@@ -19,13 +21,14 @@ function insert_after() {
 }
 
 echo -e "\n--- Installing LAMP ---\n"
-install apache php php-apache mysql
-
-if ! grep -q "localhost.localdomain" /etc/hosts; then 
-  echo "127.0.0.1  localhost.localdomain   localhost" >> /etc/hosts
-fi
+install apache php php-apache mariadb
 
 FILE=/etc/httpd/conf/httpd.conf
+if ! grep -q "localhost.localdomain" /etc/hosts; then 
+  echo "127.0.0.1  localhost.localdomain   localhost" >> /etc/hosts
+  insert_after '#ServerName' 'ServerName localhost.localdomain' $FILE
+fi
+
 if ! grep -q "modules/libphp7.so" $FILE; then
   # Make apache config changes for php
   # 
@@ -102,6 +105,9 @@ EOS
 httpd -t  2>&1 | tee -a $BUILD_LOG
 systemctl enable httpd.service
 systemctl restart httpd.service
+
+systemctl enable mariadb.service
+systemctl restart mariadb.service
 
 # echo -e "\n--- Installing Apache tools ---\n"
 # pacman -Sq base-devel --noconfirm 2>&1 | tee -a $BUILD_LOG
