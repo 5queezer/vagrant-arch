@@ -1,31 +1,59 @@
 #!/bin/bash
 
-echo -e "\n--- Installing LAMP ---\n"
-pacman -Sq apache php php-apache mysql --noconfirm 2>&1 | tee -a /var/log/vm_build.log
+BUILD_LOG=/var/log/vm_build.log
 
-FILE=/etc/hosts
-if ! grep -q "localhost.localdomain" $FILE; then 
-  echo "127.0.0.1  localhost.localdomain   localhost" >> $FILE
+function install() {
+  pacman -Sq $@ --noconfirm 2>&1 | tee -a $BUILD_LOG
+}
+
+function comment() {
+  sed "/$1/s/^/#/" $2
+}
+
+function uncomment() {
+  sed -i "s/\(#\s*\)\(.*$1.*\)/\2/" $2
+}
+
+function append_after() {
+  sed -i "/^.*$1.*/a $2" $3
+}
+
+echo -e "\n--- Installing LAMP ---\n"
+install apache php php-apache mysql
+
+if ! grep -q "localhost.localdomain" /etc/hosts; then 
+  echo "127.0.0.1  localhost.localdomain   localhost" >> /etc/hosts
 fi
 
 FILE=/etc/httpd/conf/httpd.conf
 if ! grep -q "modules/libphp7.so" $FILE; then
   # Make apache config changes for php
   # 
-  sed -i '/unique_id_module/s/^/#/' $FILE # comment
-  sed -i '/mpm_event_module/s/^/#/' $FILE
-  sed -i 's/\(#\s*\)\(.*mpm_prefork_module.*\)/\2/' $FILE #uncomment
-  sed -i '/^.*mpm_prefork_module.*/a LoadModule php7_module modules/libphp7.so\nAddHandler php7-script .php' $FILE
+  comment 'unique_id_module' $FILE
+  comment 'mpm_event_module' $FILE
+  uncomment 'mpm_prefork_module' $FILE
+  append_after 'mpm_prefork_module' 'LoadModule php7_module modules/libphp7.so\nAddHandler php7-script .php' $FILE
 
   echo -e "\n# Load PHP Module 7" >> $FILE
   echo -e "<IfModule php7_module>" >> $FILE
-  echo -e "\tInclude conf/extra/php7_module.conf" >> $FILE
+  echo -e "Include conf/extra/php7_module.conf" >> $FILE
   echo -e "</IfModule>" >> $FILE
 fi
 
-# Write an default httpd-vhosts.conf file for /srv/http
+#
+# Make a default Virtual Host
+#
+
+mkdir -p /etc/httpd/conf/vhost.d
+
 grep -q "dummy-host.example.com" /etc/httpd/conf/extra/httpd-vhosts.conf \
-&& cat << EOS > /etc/httpd/conf/extra/httpd-vhosts.conf 
+  && cat <<-EOS > /etc/httpd/conf/extra/httpd-vhosts.conf
+  Include conf/vhost.d/*.conf
+EOS
+
+# Example file
+[ ! -f /etc/httpd/conf/vhost.d/default.conf ] \
+  && cat <<-EOS > /etc/httpd/conf/vhost.d/default.conf 
 # Virtual Hosts
 #
 # Required modules: mod_log_config
@@ -58,22 +86,23 @@ grep -q "dummy-host.example.com" /etc/httpd/conf/extra/httpd-vhosts.conf \
 </VirtualHost>
 EOS
 
-# Uncomment httpd-vhosts.conf line
-sed -i 's/\(#\)\(.*httpd-vhosts.conf\)/\2/' $FILE
+uncomment 'httpd-vhosts.conf' $FILE
 
-[ ! -d /srv/http/default ] && mkdir -p /srv/http/default && chown http:http /srv/http/default
-[ ! -f /srv/http/default/index.php ] && cat << EOS > /srv/http/default/index.php
+[ ! -d /srv/http/default ] \
+  && mkdir -p /srv/http/default && chown http:http /srv/http/default
+[ ! -f /srv/http/default/index.php ] \
+  && cat <<-EOS > /srv/http/default/index.php
 <?php
 phpinfo();
 EOS
 
 
-httpd -t  2>&1 | tee -a /var/log/vm_build.log
+httpd -t  2>&1 | tee -a $BUILD_LOG
 systemctl enable httpd.service
 systemctl restart httpd.service
 
 # echo -e "\n--- Installing Apache tools ---\n"
-# pacman -Sq base-devel --noconfirm 2>&1 | tee -a /var/log/vm_build.log
+# pacman -Sq base-devel --noconfirm 2>&1 | tee -a $BUILD_LOG
 # PATH=$PWD
 # cd /tmp
 # sudo -u vagrant curl -O https://aur.archlinux.org/cgit/aur.git/snapshot/a2enmod-git.tar.gz
