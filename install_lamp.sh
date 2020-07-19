@@ -12,8 +12,8 @@ function comment() {
 }
 
 function uncomment() {
-  grep -qE "^[#\s].*$1" $2 \
-  && sed -i "s/\(#\s*\)\(.*$1.*\)/\2/" $2
+  grep -qE "^#.*$1" $2 \
+  && sed -i "s/^#\(.*$1.*\)/\1/" $2
 }
 
 function insert_after() {
